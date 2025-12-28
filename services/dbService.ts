@@ -3,13 +3,14 @@ import { Dexie } from 'dexie';
 import type { Table } from 'dexie';
 import { AuditSession } from '../types';
 
+// The AuditDatabase class extends Dexie to provide a typed interface for our logic audit history.
 export class AuditDatabase extends Dexie {
   audits!: Table<AuditSession>;
 
   constructor() {
     super('AuditLogicDB');
     // Defining the database schema using the versioning system.
-    // Fix: Using named import for Dexie class to ensure inherited methods like 'version' are correctly recognized by the TypeScript compiler.
+    // Using named import for Dexie ensures inherited methods like 'version' are correctly mapped by the TypeScript compiler.
     this.version(1).stores({
       audits: 'id, timestamp' 
     });
