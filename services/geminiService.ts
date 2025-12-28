@@ -7,7 +7,7 @@ export class GeminiService {
 
   constructor() {
     // Initializing with the API key exclusively from process.env.API_KEY as a named parameter.
-    this.ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    this.ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
   }
 
   async auditStatement(statement: string): Promise<AuditResult> {
