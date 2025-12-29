@@ -11,16 +11,41 @@ const App: React.FC = () => {
   const [currentAudit, setCurrentAudit] = useState<AuditResult | null>(null);
   const [history, setHistory] = useState<AuditSession[]>([]);
   const [view, setView] = useState<'audit' | 'history'>('audit');
+  const [hasKey, setHasKey] = useState<boolean>(true);
 
-  // Load history from Dexie DB
-  const loadHistory = async () => {
-    const savedAudits = await db.getAllAudits();
-    setHistory(savedAudits);
-  };
-
+  // Check if API key is selected or present on mount
   useEffect(() => {
+    const checkKey = async () => {
+      if (window.aistudio) {
+        const selected = await window.aistudio.hasSelectedApiKey();
+        // Also check if it's already in process.env (e.g. from environment variable)
+        const inEnv = !!process.env.API_KEY;
+        setHasKey(selected || inEnv);
+      } else {
+        setHasKey(!!process.env.API_KEY);
+      }
+    };
+    checkKey();
     loadHistory();
   }, []);
+
+  const loadHistory = async () => {
+    try {
+      const savedAudits = await db.getAllAudits();
+      setHistory(savedAudits);
+    } catch (e) {
+      console.error("Failed to load history", e);
+    }
+  };
+
+  const handleOpenKeyDialog = async () => {
+    if (window.aistudio) {
+      await window.aistudio.openSelectKey();
+      // Assume success as per guidelines to avoid race condition
+      setHasKey(true);
+      setError(null);
+    }
+  };
 
   const handleAudit = async () => {
     if (!input.trim()) return;
@@ -43,11 +68,51 @@ const App: React.FC = () => {
       setCurrentAudit(result);
       setHistory(prev => [session, ...prev]);
     } catch (err: any) {
-      setError(err.message || "Audit interrupted by logical error.");
+      const errMsg = err.message || "Audit interrupted by logical error.";
+      setError(errMsg);
+      
+      // If the error explicitly mentions keys or missing entity, force the key selection flow
+      if (errMsg.toLowerCase().includes("api key") || errMsg.toLowerCase().includes("re-select") || errMsg.toLowerCase().includes("not found")) {
+        setHasKey(false);
+      }
     } finally {
       setLoading(false);
     }
   };
+
+  if (!hasKey) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#F5F5F7] p-6">
+        <div className="apple-card p-8 max-w-md w-full text-center animate-in fade-in zoom-in duration-300">
+          <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-6">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+            </svg>
+          </div>
+          <h2 className="text-2xl font-bold mb-2">API Key Required</h2>
+          <p className="text-[#86868B] mb-8">
+            AuditLogic requires a Gemini API key to perform logical analysis. Please select a key or configure your environment.
+          </p>
+          <button onClick={handleOpenKeyDialog} className="apple-button w-full py-3 mb-4">
+            Select API Key
+          </button>
+          <a 
+            href="https://ai.google.dev/gemini-api/docs/billing" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="text-xs text-[#0071E3] hover:underline"
+          >
+            Learn more about Gemini API billing
+          </a>
+          {process.env.NODE_ENV === 'production' && (
+            <p className="mt-4 text-[10px] text-gray-400">
+              Note: Map 'GEMINI_API_KEY' secret to 'API_KEY' in Cloud Run settings.
+            </p>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen pb-20">
@@ -103,8 +168,11 @@ const App: React.FC = () => {
                   />
 
                   {error && (
-                    <div className="mb-6 p-4 bg-red-50 text-red-600 rounded-xl text-sm border border-red-100">
-                      {error}
+                    <div className="mb-6 p-4 bg-red-50 text-red-600 rounded-xl text-sm border border-red-100 flex justify-between items-center animate-in fade-in slide-in-from-top-2">
+                      <span>{error}</span>
+                      <button onClick={handleOpenKeyDialog} className="text-[#0071E3] font-bold hover:underline ml-4 whitespace-nowrap">
+                        Fix Key
+                      </button>
                     </div>
                   )}
 
@@ -117,7 +185,15 @@ const App: React.FC = () => {
                       disabled={loading || !input.trim()}
                       className={`apple-button px-10 py-3 flex items-center gap-2 ${loading || !input.trim() ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
-                      {loading ? 'Auditing Logic...' : 'Analyze Thesis'}
+                      {loading ? (
+                        <>
+                          <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          Processing...
+                        </>
+                      ) : 'Analyze Thesis'}
                     </button>
                   </div>
                 </div>
